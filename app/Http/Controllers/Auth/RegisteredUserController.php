@@ -34,7 +34,7 @@ class RegisteredUserController extends Controller
         ]);
 
         if (User::count() === 1) {
-            $user->update(['is_admin' => true, 'role' => 'admin']);
+            $user->update(['is_admin' => true]);
         }
 
         event(new Registered($user));

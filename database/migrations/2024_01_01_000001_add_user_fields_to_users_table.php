@@ -12,14 +12,13 @@ return new class extends Migration
             $table->integer('reputation')->default(0);
             $table->boolean('is_admin')->default(false);
             $table->boolean('is_banned')->default(false);
-            $table->enum('role', ['member', 'admin'])->default('member');
         });
     }
 
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn(['reputation', 'is_admin', 'is_banned', 'role']);
+            $table->dropColumn(['reputation', 'is_admin', 'is_banned']);
         });
     }
 };
