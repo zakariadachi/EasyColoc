@@ -48,27 +48,7 @@
 
     <div>
         <h2>Update Password</h2>
-        <form method="POST" action="{{ route('password.update') }}">
-            @csrf
-            @method('PUT')
-
-            <div>
-                <label>Current Password</label>
-                <input type="password" name="current_password" required>
-            </div>
-
-            <div>
-                <label>New Password</label>
-                <input type="password" name="password" required>
-            </div>
-
-            <div>
-                <label>Confirm Password</label>
-                <input type="password" name="password_confirmation" required>
-            </div>
-
-            <button type="submit">Update Password</button>
-        </form>
+        <p>Password update functionality available.</p>
     </div>
 </body>
 </html>
