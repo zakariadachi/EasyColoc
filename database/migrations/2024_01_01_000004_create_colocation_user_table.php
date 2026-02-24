@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('colocation_user', function (Blueprint $table) {
+        Schema::create('membership', function (Blueprint $table) {
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('colocation_id')->constrained()->onDelete('cascade');
             $table->enum('role', ['owner', 'member']);
@@ -19,6 +19,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('colocation_user');
+        Schema::dropIfExists('membership');
     }
 };
