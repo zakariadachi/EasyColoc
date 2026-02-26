@@ -13,8 +13,9 @@ class ColocationController extends Controller
     {
         /** @var User $user */
         $user = Auth::user();
-        $colocation = $user->ownedColocations()->first();
-        return view('colocations.index', compact('colocation'));
+        $colocations = $user->colocations()->wherePivot('left_at', null)->get();
+        $colocations->load('members');
+        return view('colocations.index', compact('colocations'));
     }
 
     public function create()
@@ -30,6 +31,10 @@ class ColocationController extends Controller
         /** @var User $user */
         $user = Auth::user();
         abort_if($user->ownedColocations()->exists(), 403, 'You already own a colocation');
+        
+        if ($user->colocations()->wherePivot('left_at', null)->exists()) {
+            return back()->with('error', 'You already have an active colocation membership');
+        }
 
         $request->validate([
             'name' => 'required|string|max:255',
@@ -80,5 +85,35 @@ class ColocationController extends Controller
         abort_if($colocation->owner_id !== Auth::id(), 403);
         $colocation->delete();
         return redirect()->route('colocations.index');
+    }
+
+    public function leave(Colocation $colocation)
+    {
+        $user = Auth::user();
+        
+        if ($colocation->owner_id === $user->id) {
+            return back()->with('error', 'Owner cannot leave the colocation');
+        }
+
+        $colocation->members()->updateExistingPivot($user->id, [
+            'left_at' => now(),
+        ]);
+
+        return redirect()->route('colocations.index')->with('success', 'You have left the colocation');
+    }
+
+    public function removeMember(Colocation $colocation, User $member)
+    {
+        abort_if($colocation->owner_id !== Auth::id(), 403);
+
+        if ($colocation->owner_id === $member->id) {
+            return back()->with('error', 'Cannot remove the owner');
+        }
+
+        $colocation->members()->updateExistingPivot($member->id, [
+            'left_at' => now(),
+        ]);
+
+        return back()->with('success', 'Member removed successfully');
     }
 }
