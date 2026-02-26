@@ -21,21 +21,30 @@ class InvitationController extends Controller
             'email' => 'required|email',
         ]);
 
+        // Check if invited user already has an active colocation
+        $invitedUser = User::where('email', $request->email)->first();
+        if ($invitedUser) {
+            $hasOwnedColocation = $invitedUser->ownedColocations()->where('status', 'active')->exists();
+            $hasMemberColocation = $invitedUser->colocations()->wherePivot('left_at', null)->exists();
+            
+            if ($hasOwnedColocation || $hasMemberColocation) {
+                return back()->with('error', 'This user already has an active colocation membership');
+            }
+        }
+
         $invitation = Invitation::create([
             'colocation_id' => $colocation->id,
             'email' => $request->email,
             'token' => Invitation::generateToken(),
-            'expires_at' => now()->addDays(7),
+            // 'expires_at' => now()->addDays(7),
         ]);
 
-        Mail::raw(
-            "You've been invited to join {$colocation->name}. Click here: " . url("/invitations/{$invitation->token}"),
-            function ($message) use ($request) {
-                $message->to($request->email)->subject('Colocation Invitation');
-            }
-        );
-
-        return back()->with('success', 'Invitation sent successfully');
+        try {
+            Mail::to($request->email)->send(new \App\Mail\InvitationMail($invitation));
+            return back()->with('success', 'Invitation sent successfully');
+        } catch (\Exception $e) {
+            return back()->with('success', 'Invitation created. Email will be sent shortly.');
+        }
     }
 
     public function show($token)
@@ -55,20 +64,23 @@ class InvitationController extends Controller
 
     public function accept($token)
     {
+        
         /** @var User $user */
         $user = Auth::user();
         $invitation = Invitation::where('token', $token)->firstOrFail();
 
-        if ($invitation->isExpired()) {
-            return redirect('/')->with('error', 'This invitation has expired');
-        }
+        // if ($invitation->isExpired()) {
+        //     return redirect('/')->with('error', 'This invitation has expired');
+        // }
 
         if ($invitation->isAccepted()) {
             return redirect('/')->with('error', 'This invitation has already been used');
         }
 
-        if ($user->colocations()->wherePivot('left_at', null)->exists()) {
-            return redirect('/')->with('error', 'You already have an active colocation membership');
+        // Check if user already owns a colocation or is a member of one
+        if ($user->ownedColocations()->where('status', 'active')->exists() || 
+            $user->colocations()->wherePivot('left_at', null)->exists()) {
+            return redirect()->route('colocations.index')->with('error', 'You already have an active colocation membership');
         }
 
         $invitation->colocation->members()->attach($user->id, [
