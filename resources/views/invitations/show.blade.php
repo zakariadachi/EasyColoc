@@ -15,4 +15,4 @@
         <p>Please <a href="{{ route('login') }}">login</a> or <a href="{{ route('register') }}">register</a> to accept this invitation.</p>
     @endif
 </body>
-</html>
+ </html>
