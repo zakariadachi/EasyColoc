@@ -39,6 +39,12 @@
         </div>
 
         <div class="max-w-7xl mx-auto text-center">
+            @if(session('success'))
+                <div class="max-w-2xl mx-auto mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-left">{{ session('success') }}</div>
+            @endif
+            @if(session('error'))
+                <div class="max-w-2xl mx-auto mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-left">{{ session('error') }}</div>
+            @endif
             <h1 class="text-5xl md:text-7xl font-extrabold text-slate-900 tracking-tight mb-6">
                 Finis les calculs, <br>
                 <span class="text-indigo-600">vivez votre colocation.</span>

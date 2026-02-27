@@ -13,7 +13,11 @@
             <div class="flex gap-3">
                 <button data-modal-target="inviteModal" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg">Inviter</button>
                 @if($colocation->owner_id === auth()->id())
-                    <button class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg">Paramètres</button>
+                    <form action="{{ route('colocations.destroy', $colocation) }}" method="POST" class="inline">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="px-4 py-2 bg-rose-500 hover:bg-rose-600 rounded-lg" onclick="return confirm('Fermer la colocation ?')">Fermer</button>
+                    </form>
                 @else
                     <form action="{{ route('colocations.leave', $colocation) }}" method="POST">
                         @csrf
