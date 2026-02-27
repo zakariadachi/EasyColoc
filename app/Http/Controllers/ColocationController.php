@@ -6,6 +6,7 @@ use App\Models\Colocation;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class ColocationController extends Controller
 {
@@ -22,7 +23,13 @@ class ColocationController extends Controller
     {
         /** @var User $user */
         $user = Auth::user();
-        abort_if($user->ownedColocations()->exists(), 403, 'You already own a colocation');
+        $hasActiveOwned = $user->ownedColocations()
+            ->where('status', 'active')
+            ->whereHas('members', function($q) use ($user) {
+                $q->where('user_id', $user->id)->whereNull('left_at');
+            })->exists();
+        
+        abort_if($hasActiveOwned, 403, 'You already own an active colocation');
         return view('colocations.create');
     }
 
@@ -30,15 +37,12 @@ class ColocationController extends Controller
     {
         /** @var User $user */
         $user = Auth::user();
-        abort_if($user->ownedColocations()->exists(), 403, 'You already own a colocation');
         
         if ($user->colocations()->wherePivot('left_at', null)->exists()) {
-            return back()->with('error', 'You already have an active colocation membership');
+            return back()->with('error', 'You already have an active colocation');
         }
 
-        $request->validate([
-            'name' => 'required|string|max:255',
-        ]);
+        $request->validate(['name' => 'required|string|max:255']);
 
         $colocation = Colocation::create([
             'name' => $request->name,
@@ -46,17 +50,30 @@ class ColocationController extends Controller
             'owner_id' => Auth::id(),
         ]);
 
-        $colocation->members()->attach(Auth::id(), [
-            'role' => 'owner',
-            'joined_at' => now(),
-        ]);
+        $existingMembership = DB::table('colocation_user')->where('user_id', Auth::id())->first();
+        
+        if ($existingMembership) {
+            DB::table('colocation_user')->where('user_id', Auth::id())->update([
+                'colocation_id' => $colocation->id,
+                'role' => 'owner',
+                'joined_at' => now(),
+                'left_at' => null,
+            ]);
+        } else {
+            $colocation->members()->attach(Auth::id(), [
+                'role' => 'owner',
+                'joined_at' => now(),
+            ]);
+        }
 
         return redirect()->route('colocations.index');
     }
 
     public function show(Colocation $colocation)
     {
-        abort_if($colocation->owner_id !== Auth::id(), 403);
+        $user = Auth::user();
+        $isMember = $colocation->members()->where('user_id', $user->id)->wherePivot('left_at', null)->exists();
+        abort_if(!$isMember, 403);
         return view('colocations.show', compact('colocation'));
     }
 
@@ -83,8 +100,11 @@ class ColocationController extends Controller
     public function destroy(Colocation $colocation)
     {
         abort_if($colocation->owner_id !== Auth::id(), 403);
-        $colocation->delete();
-        return redirect()->route('colocations.index');
+        
+        $colocation->members()->updateExistingPivot(Auth::id(), ['left_at' => now()]);
+        $colocation->update(['status' => 'cancelled']);
+        
+        return redirect()->route('colocations.index')->with('success', 'Colocation closed successfully');
     }
 
     public function leave(Colocation $colocation)
