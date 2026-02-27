@@ -124,6 +124,12 @@ class ColocationController extends Controller
     {
         abort_if($colocation->owner_id !== Auth::id(), 403);
         
+        $activeMembersCount = $colocation->members()->wherePivot('left_at', null)->where('user_id', '!=', Auth::id())->count();
+        
+        if ($activeMembersCount > 0) {
+            return back()->with('error', 'Cannot close colocation while there are active members. Remove all members first.');
+        }
+        
         $colocation->members()->updateExistingPivot(Auth::id(), ['left_at' => now()]);
         $colocation->update(['status' => 'cancelled']);
         
@@ -136,6 +142,18 @@ class ColocationController extends Controller
         
         if ($colocation->owner_id === $user->id) {
             return back()->with('error', 'Owner cannot leave the colocation');
+        }
+
+        // Calculate user's balance before leaving
+        $balance = $this->calculateUserBalance($colocation, $user->id);
+        
+        // Update reputation based on balance
+        if ($balance < -0.01) {
+            // User owes money
+            $user->decrement('reputation');
+        } else {
+            // User is owed or balanced
+            $user->increment('reputation');
         }
 
         $colocation->members()->updateExistingPivot($user->id, [
@@ -153,10 +171,47 @@ class ColocationController extends Controller
             return back()->with('error', 'Cannot remove the owner');
         }
 
+        // Calculate member's balance before removal
+        $balance = $this->calculateUserBalance($colocation, $member->id);
+        
+        // Update reputation based on balance
+        if ($balance < -0.01) {
+            // Member owes money - decrease reputation
+            $member->decrement('reputation');
+        } else {
+            // Member is owed or balanced
+            $member->increment('reputation');
+        }
+
         $colocation->members()->updateExistingPivot($member->id, [
             'left_at' => now(),
         ]);
 
         return back()->with('success', 'Member removed successfully');
+    }
+
+    private function calculateUserBalance(Colocation $colocation, int $userId)
+    {
+        $members = $colocation->members()->wherePivot('left_at', null)->get();
+        $memberCount = $members->count();
+
+        if ($memberCount === 0) {
+            return 0;
+        }
+
+        $expenses = $colocation->expenses()->get();
+        $balance = 0;
+
+        foreach ($expenses as $expense) {
+            $sharePerMember = $expense->amount / $memberCount;
+            
+            if ($expense->user_id === $userId) {
+                $balance += $expense->amount - $sharePerMember;
+            } else {
+                $balance -= $sharePerMember;
+            }
+        }
+
+        return $balance;
     }
 }
