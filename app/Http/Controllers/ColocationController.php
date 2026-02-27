@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Colocation;
+use App\Models\Category;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -69,15 +70,34 @@ class ColocationController extends Controller
         return redirect()->route('colocations.index');
     }
 
-    public function show(Colocation $colocation)
+    public function show(Request $request, Colocation $colocation)
     {
         $user = Auth::user();
         $isMember = $colocation->members()->where('user_id', $user->id)->wherePivot('left_at', null)->exists();
         abort_if(!$isMember, 403);
+        
         $colocation->load(['members' => function($query) {
             $query->wherePivot('left_at', null);
         }]);
-        return view('colocations.show', compact('colocation'));
+        
+        $month = $request->get('month', now()->format('Y-m'));
+        
+        $expenses = $colocation->expenses()
+            ->whereYear('date', substr($month, 0, 4))
+            ->whereMonth('date', substr($month, 5, 2))
+            ->with(['user', 'category'])
+            ->orderBy('date', 'desc')
+            ->get();
+        
+        $categories = Category::whereNull('colocation_id')
+            ->orWhere('colocation_id', $colocation->id)
+            ->get();
+        
+        $stats = $expenses->groupBy('category_id')->map(function($items) {
+            return $items->sum('amount');
+        });
+        
+        return view('colocations.show', compact('colocation', 'expenses', 'categories', 'month', 'stats'));
     }
 
     public function edit(Colocation $colocation)
