@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\DB;
 
 class InvitationController extends Controller
 {
@@ -70,10 +71,21 @@ class InvitationController extends Controller
             return redirect()->route('colocations.index')->with('error', 'You already have an active colocation');
         }
 
-        $invitation->colocation->members()->attach($user->id, [
-            'role' => 'member',
-            'joined_at' => now(),
-        ]);
+        $existingMembership = DB::table('colocation_user')->where('user_id', $user->id)->first();
+        
+        if ($existingMembership) {
+            DB::table('colocation_user')->where('user_id', $user->id)->update([
+                'colocation_id' => $invitation->colocation_id,
+                'role' => 'member',
+                'joined_at' => now(),
+                'left_at' => null,
+            ]);
+        } else {
+            $invitation->colocation->members()->attach($user->id, [
+                'role' => 'member',
+                'joined_at' => now(),
+            ]);
+        }
 
         $invitation->update(['accepted_at' => now()]);
 

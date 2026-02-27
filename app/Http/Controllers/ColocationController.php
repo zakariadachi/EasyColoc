@@ -74,6 +74,9 @@ class ColocationController extends Controller
         $user = Auth::user();
         $isMember = $colocation->members()->where('user_id', $user->id)->wherePivot('left_at', null)->exists();
         abort_if(!$isMember, 403);
+        $colocation->load(['members' => function($query) {
+            $query->wherePivot('left_at', null);
+        }]);
         return view('colocations.show', compact('colocation'));
     }
 
