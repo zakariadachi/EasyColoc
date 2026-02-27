@@ -91,4 +91,21 @@ class InvitationController extends Controller
 
         return redirect()->route('colocations.index')->with('success', 'You joined the colocation');
     }
+
+    public function decline($token)
+    {
+        $invitation = Invitation::where('token', $token)->firstOrFail();
+
+        if ($invitation->isExpired()) {
+            return redirect('/')->with('error', 'Invitation expired');
+        }
+
+        if ($invitation->isAccepted()) {
+            return redirect('/')->with('error', 'Invitation already used');
+        }
+
+        $invitation->delete();
+
+        return redirect('/')->with('success', 'Invitation declined');
+    }
 }

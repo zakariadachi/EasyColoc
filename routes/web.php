@@ -16,6 +16,7 @@ Route::get('/dashboard', function () {
 
 Route::get('/invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
 Route::post('/invitations/{token}/accept', [InvitationController::class, 'accept'])->middleware('auth')->name('invitations.accept');
+Route::post('/invitations/{token}/decline', [InvitationController::class, 'decline'])->middleware('auth')->name('invitations.decline');
 
 Route::middleware(['auth', 'banned'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
