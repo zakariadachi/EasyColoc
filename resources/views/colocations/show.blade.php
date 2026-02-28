@@ -11,7 +11,9 @@
                 <p class="text-indigo-100">{{ $colocation->address }}</p>
             </div>
             <div class="flex gap-3">
-                <button data-modal-target="inviteModal" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg">Inviter</button>
+                @if($colocation->owner_id === auth()->id())
+                    <button data-modal-target="inviteModal" class="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg">Inviter</button>
+                @endif
                 @if($colocation->owner_id === auth()->id())
                     <form action="{{ route('colocations.destroy', $colocation) }}" method="POST" class="inline">
                         @csrf
@@ -64,6 +66,7 @@
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-bold">Dépenses</h3>
             <div class="flex gap-3">
+                <a href="{{ route('settlements.index', $colocation) }}" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Règlements</a>
                 <form method="GET" class="flex gap-2">
                     <input type="month" name="month" value="{{ $month }}" class="px-3 py-2 border border-slate-300 rounded-lg" onchange="this.form.submit()">
                 </form>
