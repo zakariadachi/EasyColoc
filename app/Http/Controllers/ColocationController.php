@@ -150,10 +150,12 @@ class ColocationController extends Controller
         // Update reputation based on balance
         if ($balance < -0.01) {
             // User owes money
-            $user->decrement('reputation');
+            $user->reputation = $user->reputation - 1;
+            $user->save();
         } else {
             // User is owed or balanced
-            $user->increment('reputation');
+            $user->reputation = $user->reputation + 1;
+            $user->save();
         }
 
         $colocation->members()->updateExistingPivot($user->id, [
@@ -177,10 +179,12 @@ class ColocationController extends Controller
         // Update reputation based on balance
         if ($balance < -0.01) {
             // Member owes money - decrease reputation
-            $member->decrement('reputation');
+            $member->reputation = $member->reputation - 1;
+            $member->save();
         } else {
             // Member is owed or balanced
-            $member->increment('reputation');
+            $member->reputation = $member->reputation + 1;
+            $member->save();
         }
 
         $colocation->members()->updateExistingPivot($member->id, [
