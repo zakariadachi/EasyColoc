@@ -13,9 +13,9 @@
             <h3 class="text-2xl font-bold text-slate-900">{{ auth()->user()->name }}</h3>
             <p class="text-slate-500 mb-4">{{ auth()->user()->email }}</p>
             <div class="flex flex-wrap gap-4 justify-center md:justify-start">
-                <div class="bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100">
-                    <p class="text-[10px] font-bold text-emerald-800 uppercase tracking-widest">Ma Réputation</p>
-                    <p class="text-xl font-black text-emerald-600">+{{ auth()->user()->reputation ?? 0 }}</p>
+                <div class="{{ (auth()->user()->reputation ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100' }} px-4 py-2 rounded-xl border">
+                    <p class="text-[10px] font-bold {{ (auth()->user()->reputation ?? 0) >= 0 ? 'text-emerald-800' : 'text-rose-800' }} uppercase tracking-widest">Ma Réputation</p>
+                    <p class="text-xl font-black {{ (auth()->user()->reputation ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600' }}">{{ (auth()->user()->reputation ?? 0) >= 0 ? '+' : '' }}{{ auth()->user()->reputation ?? 0 }}</p>
                 </div>
                 <div class="bg-indigo-50 px-4 py-2 rounded-xl border border-indigo-100">
                     <p class="text-[10px] font-bold text-indigo-800 uppercase tracking-widest">Membre depuis</p>

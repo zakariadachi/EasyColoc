@@ -67,6 +67,10 @@ class InvitationController extends Controller
             return redirect('/')->with('error', 'Invitation already used');
         }
 
+        if ($user->email !== $invitation->email) {
+            return redirect('/')->with('error', 'This invitation was sent to a different email address. Please log in with the correct account.');
+        }
+
         if ($user->colocations()->wherePivot('left_at', null)->exists()) {
             return redirect()->route('colocations.index')->with('error', 'You already have an active colocation');
         }

@@ -28,7 +28,7 @@
                     </div>
                     <div>
                         <p class="text-sm font-bold">{{ auth()->user()->name }}</p>
-                        <p class="text-xs text-slate-400">Score: <span class="text-emerald-600 font-bold">+{{ auth()->user()->reputation ?? 0 }}</span></p>
+                        <p class="text-xs text-slate-400">Score: <span class="{{ (auth()->user()->reputation ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600' }} font-bold">{{ (auth()->user()->reputation ?? 0) >= 0 ? '+' : '' }}{{ auth()->user()->reputation ?? 0 }}</span></p>
                     </div>
                 </div>
             </div>

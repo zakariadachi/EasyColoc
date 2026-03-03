@@ -24,18 +24,16 @@ Route::middleware(['auth', 'banned'])->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     
-    Route::resource('colocations', ColocationController::class);
+    Route::resource('colocations', ColocationController::class)->only(['index', 'store', 'show', 'destroy']);
     Route::post('/colocations/{colocation}/invite', [InvitationController::class, 'send'])->name('colocations.invite');
     Route::post('/colocations/{colocation}/leave', [ColocationController::class, 'leave'])->name('colocations.leave');
     Route::delete('/colocations/{colocation}/members/{member}', [ColocationController::class, 'removeMember'])->name('colocations.removeMember');
     
     Route::post('/colocations/{colocation}/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
-    Route::put('/colocations/{colocation}/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
     Route::delete('/colocations/{colocation}/expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
+    Route::post('/colocations/{colocation}/expenses/{expense}/pay-share', [ExpenseController::class, 'payShare'])->name('expenses.payShare');
     
     Route::get('/colocations/{colocation}/settlements', [SettlementController::class, 'index'])->name('settlements.index');
-    Route::post('/colocations/{colocation}/settlements', [SettlementController::class, 'store'])->name('settlements.store');
-    Route::post('/colocations/{colocation}/settlements/{settlement}/paid', [SettlementController::class, 'markAsPaid'])->name('settlements.markAsPaid');
 });
 
 Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {

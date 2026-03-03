@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Colocation;
 use App\Models\Category;
 use App\Models\User;
+use App\Models\Expense;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use App\Models\Settlement;
 
 class ColocationController extends Controller
 {
@@ -16,22 +18,10 @@ class ColocationController extends Controller
         /** @var User $user */
         $user = Auth::user();
         $colocations = $user->colocations()->wherePivot('left_at', null)->get();
-        $colocations->load('members');
+        $colocations->load(['members' => function($query) {
+            $query->wherePivot('left_at', null);
+        }]);
         return view('colocations.index', compact('colocations'));
-    }
-
-    public function create()
-    {
-        /** @var User $user */
-        $user = Auth::user();
-        $hasActiveOwned = $user->ownedColocations()
-            ->where('status', 'active')
-            ->whereHas('members', function($q) use ($user) {
-                $q->where('user_id', $user->id)->whereNull('left_at');
-            })->exists();
-        
-        abort_if($hasActiveOwned, 403, 'You already own an active colocation');
-        return view('colocations.create');
     }
 
     public function store(Request $request)
@@ -80,14 +70,16 @@ class ColocationController extends Controller
             $query->wherePivot('left_at', null);
         }]);
         
-        $month = $request->get('month', now()->format('Y-m'));
+        $month = $request->get('month', 'all');
         
-        $expenses = $colocation->expenses()
-            ->whereYear('date', substr($month, 0, 4))
-            ->whereMonth('date', substr($month, 5, 2))
-            ->with(['user', 'category'])
-            ->orderBy('date', 'desc')
-            ->get();
+        $expensesQuery = $colocation->expenses()->with(['user', 'category']);
+        
+        if ($month !== 'all' && $month !== null) {
+            $expensesQuery->whereYear('date', substr($month, 0, 4))
+                         ->whereMonth('date', substr($month, 5, 2));
+        }
+        
+        $expenses = $expensesQuery->orderBy('date', 'desc')->get();
         
         $categories = Category::whereNull('colocation_id')
             ->orWhere('colocation_id', $colocation->id)
@@ -96,28 +88,21 @@ class ColocationController extends Controller
         $stats = $expenses->groupBy('category_id')->map(function($items) {
             return $items->sum('amount');
         });
+
+        // Preload settled shares to avoid N+1 in view
+        $settledShares = Settlement::where('colocation_id', $colocation->id)
+            ->whereNotNull('expense_id')
+            ->where('is_paid', true)
+            ->get()
+            ->keyBy(fn($s) => $s->expense_id . '_' . $s->payer_id);
         
-        return view('colocations.show', compact('colocation', 'expenses', 'categories', 'month', 'stats'));
-    }
-
-    public function edit(Colocation $colocation)
-    {
-        abort_if($colocation->owner_id !== Auth::id(), 403);
-        return view('colocations.edit', compact('colocation'));
-    }
-
-    public function update(Request $request, Colocation $colocation)
-    {
-        abort_if($colocation->owner_id !== Auth::id(), 403);
-
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'status' => 'required|in:active,cancelled',
-        ]);
-
-        $colocation->update($request->only('name', 'status'));
-
-        return redirect()->route('colocations.index');
+        // Calculate balances for each member
+        $balances = [];
+        foreach ($colocation->members as $member) {
+            $balances[$member->id] = $this->calculateUserBalance($colocation, $member->id);
+        }
+        
+        return view('colocations.show', compact('colocation', 'expenses', 'categories', 'month', 'stats', 'settledShares', 'balances'));
     }
 
     public function destroy(Colocation $colocation)
@@ -130,6 +115,18 @@ class ColocationController extends Controller
             return back()->with('error', 'Cannot close colocation while there are active members. Remove all members first.');
         }
         
+        /** @var User $user */
+        $user = Auth::user();
+        $balance = $this->calculateUserBalance($colocation, $user->id);
+        
+        if ($balance < -0.01) {
+            $user->reputation = $user->reputation - 1;
+            $user->save();
+        } else {
+            $user->reputation = $user->reputation + 1;
+            $user->save();
+        }
+        
         $colocation->members()->updateExistingPivot(Auth::id(), ['left_at' => now()]);
         $colocation->update(['status' => 'cancelled']);
         
@@ -138,22 +135,19 @@ class ColocationController extends Controller
 
     public function leave(Colocation $colocation)
     {
+        /** @var User $user */
         $user = Auth::user();
         
         if ($colocation->owner_id === $user->id) {
             return back()->with('error', 'Owner cannot leave the colocation');
         }
 
-        // Calculate user's balance before leaving
         $balance = $this->calculateUserBalance($colocation, $user->id);
         
-        // Update reputation based on balance
         if ($balance < -0.01) {
-            // User owes money
             $user->reputation = $user->reputation - 1;
             $user->save();
         } else {
-            // User is owed or balanced
             $user->reputation = $user->reputation + 1;
             $user->save();
         }
@@ -173,16 +167,26 @@ class ColocationController extends Controller
             return back()->with('error', 'Cannot remove the owner');
         }
 
-        // Calculate member's balance before removal
         $balance = $this->calculateUserBalance($colocation, $member->id);
         
-        // Update reputation based on balance
+        // Update member reputation
         if ($balance < -0.01) {
-            // Member owes money - decrease reputation
             $member->reputation = $member->reputation - 1;
             $member->save();
+            
+            // Transfer debt to owner by creating an internal adjustment
+            $owner = User::find($colocation->owner_id);
+            $defaultCategory = Category::whereNull('colocation_id')->first();
+            
+            Expense::create([
+                'colocation_id' => $colocation->id,
+                'user_id' => $owner->id,
+                'category_id' => $defaultCategory->id,
+                'description' => "Ajustement - Dette de {$member->name} transférée",
+                'amount' => abs($balance),
+                'date' => now(),
+            ]);
         } else {
-            // Member is owed or balanced
             $member->reputation = $member->reputation + 1;
             $member->save();
         }
@@ -196,23 +200,49 @@ class ColocationController extends Controller
 
     private function calculateUserBalance(Colocation $colocation, int $userId)
     {
-        $members = $colocation->members()->wherePivot('left_at', null)->get();
-        $memberCount = $members->count();
-
-        if ($memberCount === 0) {
-            return 0;
-        }
-
         $expenses = $colocation->expenses()->get();
         $balance = 0;
 
         foreach ($expenses as $expense) {
+            $activeMembersAtExpenseTime = $colocation->members()
+                ->where(function($q) use ($expense) {
+                    $q->where('colocation_user.joined_at', '<=', $expense->date)
+                      ->where(function($q2) use ($expense) {
+                          $q2->whereNull('colocation_user.left_at')
+                             ->orWhere('colocation_user.left_at', '>', $expense->date);
+                      });
+                })
+                ->pluck('user_id');
+            
+            if (!$activeMembersAtExpenseTime->contains($userId)) {
+                continue;
+            }
+            
+            $memberCount = $activeMembersAtExpenseTime->count();
             $sharePerMember = $expense->amount / $memberCount;
             
             if ($expense->user_id === $userId) {
+                // User paid the expense initially
                 $balance += $expense->amount - $sharePerMember;
+                
+                // Subtract payments received from others for this expense
+                $paymentsReceived = Settlement::where('expense_id', $expense->id)
+                    ->where('receiver_id', $userId)
+                    ->where('is_paid', true)
+                    ->sum('amount');
+                
+                $balance -= $paymentsReceived;
             } else {
-                $balance -= $sharePerMember;
+                // Check if user already paid their share for this expense
+                $alreadyPaid = Settlement::where('expense_id', $expense->id)
+                    ->where('payer_id', $userId)
+                    ->where('is_paid', true)
+                    ->exists();
+                
+                if (!$alreadyPaid) {
+                    // User owes their share (not yet paid)
+                    $balance -= $sharePerMember;
+                }
             }
         }
 

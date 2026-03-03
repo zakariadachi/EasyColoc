@@ -8,7 +8,6 @@
         <div class="flex justify-between items-start">
             <div>
                 <h1 class="text-3xl font-bold mb-2">{{ $colocation->name }}</h1>
-                <p class="text-indigo-100">{{ $colocation->address }}</p>
             </div>
             <div class="flex gap-3">
                 @if($colocation->owner_id === auth()->id())
@@ -45,8 +44,15 @@
                         </div>
                     </div>
                     <div class="text-right">
+                        <p class="text-xs text-slate-400">Solde</p>
+                        @php $balance = $balances[$member->id] ?? 0; @endphp
+                        <span class="text-sm font-bold {{ $balance >= 0 ? 'text-emerald-600' : 'text-rose-600' }}">
+                            {{ $balance >= 0 ? '+' : '' }}{{ number_format($balance, 2) }} DH
+                        </span>
+                    </div>
+                    <div class="text-right ml-4">
                         <p class="text-xs text-slate-400">Score</p>
-                        <span class="text-sm font-bold text-emerald-600">+{{ $member->reputation ?? 0 }}</span>
+                        <span class="text-sm font-bold {{ ($member->reputation ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-600' }}">{{ ($member->reputation ?? 0) >= 0 ? '+' : '' }}{{ $member->reputation ?? 0 }}</span>
                     </div>
                     @if($colocation->owner_id === auth()->id() && $member->id !== auth()->id())
                         <form action="{{ route('colocations.removeMember', [$colocation, $member]) }}" method="POST" class="absolute top-2 right-2 opacity-0 group-hover:opacity-100">
@@ -66,19 +72,33 @@
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-bold">Dépenses</h3>
             <div class="flex gap-3">
-                <a href="{{ route('settlements.index', $colocation) }}" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Règlements</a>
+                <button data-modal-target="expenseModal" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Ajouter</button>
+                <a href="{{ route('settlements.index', $colocation) }}" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Historique</a>
                 <form method="GET" class="flex gap-2">
-                    <input type="month" name="month" value="{{ $month }}" class="px-3 py-2 border border-slate-300 rounded-lg" onchange="this.form.submit()">
+                    <select name="month" class="px-3 py-2 border border-slate-300 rounded-lg" onchange="this.form.submit()">
+                        <option value="all" {{ $month === 'all' ? 'selected' : '' }}>Tous les mois</option>
+                        @php
+                            $firstExpense = $colocation->expenses()->orderBy('date', 'asc')->first();
+                            $startDate = $firstExpense ? $firstExpense->date : now();
+                            $currentDate = now();
+                            $months = [];
+                            for ($date = $currentDate; $date >= $startDate; $date->subMonth()) {
+                                $months[] = $date->format('Y-m');
+                            }
+                        @endphp
+                        @foreach($months as $m)
+                            <option value="{{ $m }}" {{ $month === $m ? 'selected' : '' }}>
+                                {{ \Carbon\Carbon::parse($m)->locale('fr')->isoFormat('MMMM YYYY') }}
+                            </option>
+                        @endforeach
+                    </select>
                 </form>
-                @if($colocation->owner_id === auth()->id())
-                    <button data-modal-target="expenseModal" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Ajouter</button>
-                @endif
             </div>
         </div>
 
         @if($stats->isNotEmpty())
             <div class="bg-white p-4 rounded-xl border border-slate-200 mb-4">
-                <h4 class="font-bold mb-3">Statistiques du mois</h4>
+                <h4 class="font-bold mb-3">Statistiques {{ $month === 'all' ? '' : 'du mois' }}</h4>
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
                     @foreach($stats as $categoryId => $total)
                         @php $cat = $categories->firstWhere('id', $categoryId); @endphp
@@ -99,32 +119,111 @@
 
         <div class="space-y-3">
             @forelse($expenses as $expense)
-                <div class="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between">
-                    <div class="flex items-center gap-4">
-                        <div class="w-10 h-10 rounded-full bg-{{ $expense->category->color ?? 'slate' }}-100 text-{{ $expense->category->color ?? 'slate' }}-600 flex items-center justify-center">
-                            {{ $expense->category->icon ?? '💰' }}
+                <div class="bg-white p-4 rounded-xl border border-slate-200">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-full bg-{{ $expense->category->color ?? 'slate' }}-100 text-{{ $expense->category->color ?? 'slate' }}-600 flex items-center justify-center">
+                                {{ $expense->category->icon ?? '💰' }}
+                            </div>
+                            <div>
+                                <p class="font-bold">{{ $expense->description }}</p>
+                                <p class="text-xs text-slate-400">{{ $expense->category->name }} • {{ $expense->user->name }} • {{ $expense->date->format('d/m/Y') }}</p>
+                            </div>
                         </div>
-                        <div>
-                            <p class="font-bold">{{ $expense->description }}</p>
-                            <p class="text-xs text-slate-400">{{ $expense->category->name }} • {{ $expense->user->name }} • {{ $expense->date->format('d/m/Y') }}</p>
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg font-bold">{{ number_format($expense->amount, 2) }} DH</span>
+                            @if($colocation->owner_id === auth()->id())
+                                <form action="{{ route('expenses.destroy', [$colocation, $expense]) }}" method="POST" class="inline">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="p-2 text-rose-500 hover:bg-rose-50 rounded" onclick="return confirm('Supprimer ?')">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    </button>
+                                </form>
+                            @endif
                         </div>
                     </div>
-                    <div class="flex items-center gap-3">
-                        <span class="text-lg font-bold">{{ number_format($expense->amount, 2) }} DH</span>
-                        @if($colocation->owner_id === auth()->id())
-                            <form action="{{ route('expenses.destroy', [$colocation, $expense]) }}" method="POST" class="inline">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit" class="p-2 text-rose-500 hover:bg-rose-50 rounded" onclick="return confirm('Supprimer ?')">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                </button>
-                            </form>
-                        @endif
+                    
+                    @php
+                        // Get members who were active at the time of this expense
+                        $activeMembersAtExpenseTime = $colocation->members->filter(function($member) use ($expense) {
+                            $joinedAt = $member->pivot->joined_at;
+                            $leftAt = $member->pivot->left_at;
+                            
+                            // Member must have joined before or on expense date
+                            if ($joinedAt > $expense->date) {
+                                return false;
+                            }
+                            
+                            // Member must not have left, or left after expense date
+                            if ($leftAt && $leftAt <= $expense->date) {
+                                return false;
+                            }
+                            
+                            return true;
+                        });
+                        
+                        $memberCount = $activeMembersAtExpenseTime->count();
+                        
+                        // Prevent division by zero
+                        if ($memberCount === 0) {
+                            $memberCount = 1;
+                        }
+                        
+                        $sharePerMember = $expense->amount / $memberCount;
+                    @endphp
+                    
+                    <div class="border-t border-slate-100 pt-3 mt-3">
+                        <p class="text-xs font-bold text-slate-500 mb-2">Répartition ({{ number_format($sharePerMember, 2) }} DH / personne) :</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            @foreach($activeMembersAtExpenseTime as $member)
+                                <div class="flex items-center justify-between bg-slate-50 p-2 rounded">
+                                    <div class="flex items-center gap-2 text-xs">
+                                        <span class="font-medium text-slate-700">{{ $member->name }}</span>
+                                        @if($member->id === $expense->user_id)
+                                            <span class="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-bold ml-1">Payer</span>
+                                        @else
+                                            <span class="text-slate-400">→</span>
+                                            <span class="font-medium text-slate-700">{{ $expense->user->name }}</span>
+                                            <span class="font-bold text-rose-600">{{ number_format($sharePerMember, 2) }} DH</span>
+                                        @endif
+                                    </div>
+                                    
+                                    @php
+                                        $isSettled = $member->id === $expense->user_id || isset($settledShares[$expense->id . '_' . $member->id]);
+                                    @endphp
+
+                                    @if($isSettled)
+                                        <span class="px-2 py-1 bg-emerald-100 text-emerald-700 text-xs rounded font-bold">
+                                            Paid ✓
+                                        </span>
+                                    @elseif(Auth::id() === $member->id)
+                                        {{-- Regular Member: Only sees their own Pay button --}}
+                                        <form action="{{ route('expenses.payShare', [$colocation, $expense]) }}" method="POST" class="inline">
+                                            @csrf
+                                            <input type="hidden" name="member_id" value="{{ $member->id }}">
+                                            <button type="submit" class="px-2 py-1 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 font-bold">
+                                                Pay
+                                            </button>
+                                        </form>
+                                    @elseif(Auth::id() === $colocation->owner_id)
+                                        {{-- Owner: Sees Mark as Paid for ALL members --}}
+                                        <form action="{{ route('expenses.payShare', [$colocation, $expense]) }}" method="POST" class="inline">
+                                            @csrf
+                                            <input type="hidden" name="member_id" value="{{ $member->id }}">
+                                            <button type="submit" class="px-2 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 font-bold">
+                                                Mark Paid
+                                            </button>
+                                        </form>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
                     </div>
                 </div>
             @empty
                 <div class="bg-white p-8 rounded-xl border border-slate-200 text-center text-slate-400">
-                    Aucune dépense pour ce mois
+                    Aucune dépense {{ $month === 'all' ? '' : 'pour ce mois' }}
                 </div>
             @endforelse
         </div>
@@ -160,16 +259,22 @@
         </div>
         <form action="{{ route('expenses.store', $colocation) }}" method="POST" class="space-y-4">
             @csrf
-            <div>
-                <label class="block text-sm font-bold text-slate-700 mb-2">Payé par</label>
-                <select name="user_id" class="w-full px-4 py-2 border border-slate-300 rounded-lg" required>
-                    @foreach($colocation->members as $member)
-                        <option value="{{ $member->id }}" {{ $member->id === $colocation->owner_id ? 'selected' : '' }}>
-                            {{ $member->name }} {{ $member->id === $colocation->owner_id ? '(Propriétaire)' : '' }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
+            @if($colocation->owner_id === auth()->id())
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Payé par</label>
+                    <select name="user_id" class="w-full px-4 py-2 border border-slate-300 rounded-lg" required>
+                        @foreach($colocation->members as $member)
+                            <option value="{{ $member->id }}" {{ $member->id === auth()->id() ? 'selected' : '' }}>{{ $member->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            @else
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-2">Payé par</label>
+                    <input type="text" value="{{ auth()->user()->name }}" class="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-50" disabled>
+                    <p class="mt-1 text-xs text-slate-500">Vous êtes automatiquement défini comme payeur</p>
+                </div>
+            @endif
             <div>
                 <label class="block text-sm font-bold text-slate-700 mb-2">Catégorie</label>
                 <select name="category_id" class="w-full px-4 py-2 border border-slate-300 rounded-lg" required>

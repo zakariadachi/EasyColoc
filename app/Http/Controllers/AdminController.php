@@ -44,9 +44,6 @@ class AdminController extends Controller
         }
 
         $user->update(['is_banned' => true]);
-        
-        // Log out the user if they are currently logged in
-        Auth::logout();
 
         return back()->with('success', 'User banned successfully');
     }

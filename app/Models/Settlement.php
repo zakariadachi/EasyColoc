@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Settlement extends Model
 {
-    protected $fillable = ['colocation_id', 'payer_id', 'receiver_id', 'amount', 'is_paid', 'paid_at'];
+    protected $fillable = ['colocation_id', 'payer_id', 'receiver_id', 'expense_id', 'amount', 'is_paid', 'paid_at'];
 
     protected $casts = [
         'amount' => 'decimal:2',
@@ -20,13 +20,8 @@ class Settlement extends Model
         return $this->belongsTo(Colocation::class);
     }
 
-    public function payer(): BelongsTo
+    public function expense(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'payer_id');
-    }
-
-    public function receiver(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'receiver_id');
+        return $this->belongsTo(Expense::class);
     }
 }
