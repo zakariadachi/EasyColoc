@@ -89,14 +89,13 @@ class ColocationController extends Controller
             return $items->sum('amount');
         });
 
-        // Preload settled shares to avoid N+1 in view
         $settledShares = Settlement::where('colocation_id', $colocation->id)
             ->whereNotNull('expense_id')
             ->where('is_paid', true)
             ->get()
             ->keyBy(fn($s) => $s->expense_id . '_' . $s->payer_id);
         
-        // Calculate balances for each member
+        // Calculate balances
         $balances = [];
         foreach ($colocation->members as $member) {
             $balances[$member->id] = $this->calculateUserBalance($colocation, $member->id);
@@ -169,12 +168,12 @@ class ColocationController extends Controller
 
         $balance = $this->calculateUserBalance($colocation, $member->id);
         
-        // Update member reputation
+        // Updat reputation
         if ($balance < -0.01) {
             $member->reputation = $member->reputation - 1;
             $member->save();
             
-            // Transfer debt to owner by creating an internal adjustment
+            // Transfer debt to owner
             $owner = User::find($colocation->owner_id);
             $defaultCategory = Category::whereNull('colocation_id')->first();
             
@@ -225,7 +224,6 @@ class ColocationController extends Controller
                 // User paid the expense initially
                 $balance += $expense->amount - $sharePerMember;
                 
-                // Subtract payments received from others for this expense
                 $paymentsReceived = Settlement::where('expense_id', $expense->id)
                     ->where('receiver_id', $userId)
                     ->where('is_paid', true)
@@ -233,14 +231,13 @@ class ColocationController extends Controller
                 
                 $balance -= $paymentsReceived;
             } else {
-                // Check if user already paid their share for this expense
+                // Check user paid
                 $alreadyPaid = Settlement::where('expense_id', $expense->id)
                     ->where('payer_id', $userId)
                     ->where('is_paid', true)
                     ->exists();
                 
                 if (!$alreadyPaid) {
-                    // User owes their share (not yet paid)
                     $balance -= $sharePerMember;
                 }
             }

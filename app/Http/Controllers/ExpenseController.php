@@ -25,7 +25,7 @@ class ExpenseController extends Controller
             'date' => 'required|date',
         ]);
 
-        // Owner can choose who paid, members automatically set to themselves
+        // Owner can choose who paid
         $paidBy = $colocation->owner_id === $user->id && $request->has('user_id') 
             ? $request->user_id 
             : $user->id;
@@ -62,7 +62,6 @@ class ExpenseController extends Controller
         $userId = Auth::id();
         $ownerId = $colocation->owner_id;
 
-        // Debug logging
         Log::info('PayShare Debug', [
             'member_id' => $memberId,
             'user_id' => $userId,
@@ -72,11 +71,10 @@ class ExpenseController extends Controller
             'comparison' => $memberId === $userId,
         ]);
 
-        // Check if user is a member of the colocation
+        // Check if user a member colocation
         $isMember = $colocation->members()->where('user_id', $userId)->wherePivot('left_at', null)->exists();
         abort_if(!$isMember, 403, 'You are not a member of this colocation');
 
-        // Authorization: Member can pay their own share OR Owner can mark any share as paid
         $canPay = ($memberId == $userId) || ($ownerId == $userId);
         abort_if(!$canPay, 403, 'Unauthorized: You can only pay your own share or mark payments as owner');
 
